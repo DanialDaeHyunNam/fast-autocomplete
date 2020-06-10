@@ -1,3 +1,4 @@
+import string
 from collections import (
     defaultdict,
     deque
@@ -33,13 +34,15 @@ class AutoComplete:
     CACHE_SIZE = 2048
     SHOULD_INCLUDE_COUNT = True
 
-    def __init__(self, words, synonyms=None, full_stop_words=None, logger=None):
+    def __init__(self, words, synonyms=None, full_stop_words=None, logger=None, extra_valid_chars_for_string=None):
         """
         Inistializes the Autocomplete module
 
         :param words: A dictionary of words mapped to their context
         :param synonyms: (optional) A dictionary of words to their synonyms.
                          The synonym words should only be here and not repeated in words parameter.
+        :param extra_valid_chars_for_string: (optional) An extra of chars to be used when normalize node name.
+                                             In case that you're trying to auto complete non Latin alphabets.
         """
         self._lock = Lock()
         self._dwg = None
@@ -53,6 +56,13 @@ class AutoComplete:
         new_words = self._get_partial_synonyms_to_words()
         self.words.update(new_words)
         self._populate_dwg()
+        self.valid_chars_for_string = {i for i in string.ascii_letters.lower()}
+        self.valid_chars_for_integer = {i for i in string.digits}
+        self.valid_chars_for_node_name = {' ', '-', ':', '_'} | self.valid_chars_for_string | self.valid_chars_for_integer
+
+        if extra_valid_chars_for_string is not None:
+            assert type(extra_valid_chars_for_string) == set, 'extra_valid_chars_for_string should be "set" type.'
+            self.valid_chars_for_node_name = self.valid_chars_for_node_name | extra_valid_chars_for_string
 
     def _get_clean_and_partial_synonyms(self):
         """
@@ -210,7 +220,12 @@ class AutoComplete:
         """
         Gets the word's context from the words dictionary
         """
-        word = normalize_node_name(word)
+        word = normalize_node_name(
+            word,
+            self.valid_chars_for_string,
+            self.valid_chars_for_integer,
+            self.valid_chars_for_node_name,
+        )
         return self.words.get(word)
 
     def search(self, word, max_cost=2, size=5):
@@ -220,7 +235,12 @@ class AutoComplete:
         - max_cost: Maximum Levenshtein edit distance to be considered when calculating results
         - size: The max number of results to return
         """
-        word = normalize_node_name(word)
+        word = normalize_node_name(
+            word,
+            self.valid_chars_for_string,
+            self.valid_chars_for_integer,
+            self.valid_chars_for_node_name,
+        )
         if not word:
             return []
         key = f'{word}-{max_cost}-{size}'
